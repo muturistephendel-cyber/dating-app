@@ -1,0 +1,1020 @@
+import React, { useState, useRef, useCallback, useMemo } from "react";
+import { Heart, X, MessageCircle, ArrowLeft, Sparkles, MapPin, Send } from "lucide-react";
+
+// ---------- Mock data ----------
+
+const PROFILES = [
+  {
+    id: 1,
+    name: "Amara",
+    age: 27,
+    distance: "3 mi away",
+    bio: "Pottery on weekends, tacos on weekdays. Looking for someone who'll split the last dumpling with me.",
+    tags: ["Ceramics", "Hiking", "Taco connoisseur"],
+    photoColor: "#F0997B",
+  },
+  {
+    id: 2,
+    name: "Devon",
+    age: 31,
+    distance: "1 mi away",
+    bio: "Software engineer who actually leaves the laptop at home on weekends. Currently training for a half marathon I'm not ready for.",
+    tags: ["Running", "Board games", "Coffee snob"],
+    photoColor: "#85B7EB",
+  },
+  {
+    id: 3,
+    name: "Priya",
+    age: 25,
+    distance: "5 mi away",
+    bio: "Will talk your ear off about the book I just read. Plant mom to 14 and counting.",
+    tags: ["Reading", "Plants", "Karaoke"],
+    photoColor: "#97C459",
+  },
+  {
+    id: 4,
+    name: "Theo",
+    age: 29,
+    distance: "2 mi away",
+    bio: "Amateur chef, professional dishwasher avoider. Let's argue about the best pizza topping.",
+    tags: ["Cooking", "Vinyl records", "Dogs"],
+    photoColor: "#EF9F27",
+  },
+  {
+    id: 5,
+    name: "Sofia",
+    age: 28,
+    distance: "4 mi away",
+    bio: "Climbing gym regular, terrible at small talk, great at long conversations about nothing.",
+    tags: ["Climbing", "Photography", "Tea"],
+    photoColor: "#D4537E",
+  },
+  {
+    id: 6,
+    name: "Marcus",
+    age: 33,
+    distance: "6 mi away",
+    bio: "Dad joke enthusiast. I will make you laugh at least once or it's a full refund.",
+    tags: ["Comedy", "Cycling", "Jazz"],
+    photoColor: "#7F77DD",
+  },
+];
+
+const INITIAL_MESSAGES = {
+  // matchId -> array of messages
+};
+
+// ---------- Helpers ----------
+
+function initials(name) {
+  return name.charAt(0).toUpperCase();
+}
+
+// ---------- Swipe Card ----------
+
+function SwipeCard({ profile, onSwipe, isTop, stackIndex }) {
+  const cardRef = useRef(null);
+  const [drag, setDrag] = useState({ x: 0, y: 0, active: false });
+  const startRef = useRef({ x: 0, y: 0 });
+
+  const handlePointerDown = (e) => {
+    if (!isTop) return;
+    const point = e.touches ? e.touches[0] : e;
+    startRef.current = { x: point.clientX, y: point.clientY };
+    setDrag((d) => ({ ...d, active: true }));
+  };
+
+  const handlePointerMove = useCallback(
+    (e) => {
+      if (!drag.active || !isTop) return;
+      const point = e.touches ? e.touches[0] : e;
+      const dx = point.clientX - startRef.current.x;
+      const dy = point.clientY - startRef.current.y;
+      setDrag({ x: dx, y: dy, active: true });
+    },
+    [drag.active, isTop]
+  );
+
+  const handlePointerUp = useCallback(() => {
+    if (!isTop) return;
+    const threshold = 110;
+    if (drag.x > threshold) {
+      onSwipe("like", profile);
+    } else if (drag.x < -threshold) {
+      onSwipe("nope", profile);
+    } else {
+      setDrag({ x: 0, y: 0, active: false });
+    }
+  }, [drag.x, isTop, onSwipe, profile]);
+
+  React.useEffect(() => {
+    if (!drag.active) return;
+    window.addEventListener("mousemove", handlePointerMove);
+    window.addEventListener("mouseup", handlePointerUp);
+    window.addEventListener("touchmove", handlePointerMove);
+    window.addEventListener("touchend", handlePointerUp);
+    return () => {
+      window.removeEventListener("mousemove", handlePointerMove);
+      window.removeEventListener("mouseup", handlePointerUp);
+      window.removeEventListener("touchmove", handlePointerMove);
+      window.removeEventListener("touchend", handlePointerUp);
+    };
+  }, [drag.active, handlePointerMove, handlePointerUp]);
+
+  const rotation = drag.x / 20;
+  const likeOpacity = Math.min(Math.max(drag.x / 100, 0), 1);
+  const nopeOpacity = Math.min(Math.max(-drag.x / 100, 0), 1);
+
+  const offsetScale = isTop ? 1 : 1 - stackIndex * 0.04;
+  const offsetY = isTop ? 0 : stackIndex * 10;
+
+  return (
+    <div
+      ref={cardRef}
+      onMouseDown={handlePointerDown}
+      onTouchStart={handlePointerDown}
+      style={{
+        position: "absolute",
+        inset: 0,
+        borderRadius: 24,
+        overflow: "hidden",
+        cursor: isTop ? (drag.active ? "grabbing" : "grab") : "default",
+        transform: `translate(${drag.x}px, ${drag.y + offsetY}px) rotate(${rotation}deg) scale(${offsetScale})`,
+        transition: drag.active ? "none" : "transform 0.35s cubic-bezier(.2,.8,.2,1)",
+        touchAction: "none",
+        userSelect: "none",
+        boxShadow: isTop
+          ? "0 20px 50px -12px rgba(45,27,46,0.35)"
+          : "0 8px 24px -8px rgba(45,27,46,0.2)",
+        zIndex: isTop ? 10 : 10 - stackIndex,
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: `linear-gradient(160deg, ${profile.photoColor}dd, ${profile.photoColor}88)`,
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div
+          style={{
+            width: 140,
+            height: 140,
+            borderRadius: "50%",
+            background: "rgba(255,255,255,0.25)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 56,
+            fontWeight: 700,
+            color: "#fff",
+            fontFamily: "'Fredoka', sans-serif",
+          }}
+        >
+          {initials(profile.name)}
+        </div>
+      </div>
+
+      {/* LIKE stamp */}
+      <div
+        style={{
+          position: "absolute",
+          top: 32,
+          left: 24,
+          padding: "8px 18px",
+          border: "4px solid #4ECDC4",
+          borderRadius: 10,
+          color: "#4ECDC4",
+          fontFamily: "'Fredoka', sans-serif",
+          fontWeight: 700,
+          fontSize: 30,
+          letterSpacing: 2,
+          transform: "rotate(-18deg)",
+          opacity: likeOpacity,
+          background: "rgba(255,255,255,0.85)",
+        }}
+      >
+        LIKE
+      </div>
+
+      {/* NOPE stamp */}
+      <div
+        style={{
+          position: "absolute",
+          top: 32,
+          right: 24,
+          padding: "8px 18px",
+          border: "4px solid #FF6B6B",
+          borderRadius: 10,
+          color: "#FF6B6B",
+          fontFamily: "'Fredoka', sans-serif",
+          fontWeight: 700,
+          fontSize: 30,
+          letterSpacing: 2,
+          transform: "rotate(18deg)",
+          opacity: nopeOpacity,
+          background: "rgba(255,255,255,0.85)",
+        }}
+      >
+        NOPE
+      </div>
+
+      {/* Info panel */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          padding: "70px 22px 22px",
+          background:
+            "linear-gradient(to top, rgba(45,27,46,0.92), rgba(45,27,46,0.55) 60%, transparent)",
+          color: "#fff",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          <span
+            style={{
+              fontFamily: "'Fredoka', sans-serif",
+              fontSize: 28,
+              fontWeight: 600,
+            }}
+          >
+            {profile.name}
+          </span>
+          <span style={{ fontSize: 20, opacity: 0.85 }}>{profile.age}</span>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            fontSize: 13,
+            opacity: 0.85,
+            marginTop: 2,
+            marginBottom: 10,
+          }}
+        >
+          <MapPin size={13} />
+          {profile.distance}
+        </div>
+        <p style={{ fontSize: 14, lineHeight: 1.5, margin: "0 0 12px", opacity: 0.95 }}>
+          {profile.bio}
+        </p>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {profile.tags.map((tag) => (
+            <span
+              key={tag}
+              style={{
+                fontSize: 12,
+                padding: "4px 10px",
+                borderRadius: 20,
+                background: "rgba(255,255,255,0.2)",
+              }}
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Discover Screen ----------
+
+function DiscoverScreen({ onMatch }) {
+  const [deck, setDeck] = useState(PROFILES);
+  const [matchPopup, setMatchPopup] = useState(null);
+
+  const handleSwipe = (direction, profile) => {
+    setDeck((prev) => prev.filter((p) => p.id !== profile.id));
+    if (direction === "like") {
+      // Random chance to "match" for demo purposes, biased toward yes for fun
+      const isMatch = Math.random() > 0.35;
+      if (isMatch) {
+        onMatch(profile);
+        setMatchPopup(profile);
+      }
+    }
+  };
+
+  const buttonAction = (direction) => {
+    if (deck.length === 0) return;
+    const top = deck[0];
+    handleSwipe(direction, top);
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div
+        style={{
+          position: "relative",
+          flex: 1,
+          margin: "16px 20px 0",
+        }}
+      >
+        {deck.length === 0 ? (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              textAlign: "center",
+              color: "#2D1B2E",
+              padding: 32,
+            }}
+          >
+            <Sparkles size={40} color="#FFD93D" style={{ marginBottom: 12 }} />
+            <h2
+              style={{
+                fontFamily: "'Fredoka', sans-serif",
+                fontSize: 22,
+                margin: "0 0 8px",
+              }}
+            >
+              You're all caught up
+            </h2>
+            <p style={{ fontSize: 14, color: "#6b5a6c", margin: 0 }}>
+              Check back later for more people nearby.
+            </p>
+          </div>
+        ) : (
+          deck
+            .slice(0, 3)
+            .map((profile, i) => (
+              <SwipeCard
+                key={profile.id}
+                profile={profile}
+                isTop={i === 0}
+                stackIndex={i}
+                onSwipe={handleSwipe}
+              />
+            ))
+            .reverse()
+        )}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          gap: 24,
+          padding: "20px 0 8px",
+        }}
+      >
+        <button
+          onClick={() => buttonAction("nope")}
+          aria-label="Pass"
+          style={{
+            width: 58,
+            height: 58,
+            borderRadius: "50%",
+            border: "none",
+            background: "#fff",
+            boxShadow: "0 4px 14px rgba(45,27,46,0.18)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+          }}
+        >
+          <X size={26} color="#FF6B6B" strokeWidth={2.5} />
+        </button>
+        <button
+          onClick={() => buttonAction("like")}
+          aria-label="Like"
+          style={{
+            width: 58,
+            height: 58,
+            borderRadius: "50%",
+            border: "none",
+            background: "#fff",
+            boxShadow: "0 4px 14px rgba(45,27,46,0.18)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+          }}
+        >
+          <Heart size={26} color="#4ECDC4" strokeWidth={2.5} fill="#4ECDC4" />
+        </button>
+      </div>
+
+      {matchPopup && (
+        <MatchPopup profile={matchPopup} onClose={() => setMatchPopup(null)} />
+      )}
+    </div>
+  );
+}
+
+function MatchPopup({ profile, onClose }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(45,27,46,0.85)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 100,
+        padding: 24,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          textAlign: "center",
+          color: "#fff",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h1
+          style={{
+            fontFamily: "'Fredoka', sans-serif",
+            fontSize: 36,
+            margin: "0 0 6px",
+            color: "#FFD93D",
+          }}
+        >
+          It's a match!
+        </h1>
+        <p style={{ fontSize: 15, opacity: 0.85, margin: "0 0 28px" }}>
+          You and {profile.name} both said yes.
+        </p>
+        <div
+          style={{
+            width: 110,
+            height: 110,
+            borderRadius: "50%",
+            background: profile.photoColor,
+            margin: "0 auto 28px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 40,
+            fontWeight: 700,
+            fontFamily: "'Fredoka', sans-serif",
+            border: "4px solid #fff",
+          }}
+        >
+          {initials(profile.name)}
+        </div>
+        <button
+          onClick={onClose}
+          style={{
+            background: "#4ECDC4",
+            color: "#0F3D38",
+            border: "none",
+            borderRadius: 30,
+            padding: "14px 36px",
+            fontSize: 15,
+            fontWeight: 600,
+            fontFamily: "'Fredoka', sans-serif",
+            cursor: "pointer",
+          }}
+        >
+          Keep swiping
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Matches Screen ----------
+
+function MatchesScreen({ matches, onOpenChat }) {
+  if (matches.length === 0) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100%",
+          textAlign: "center",
+          padding: 32,
+          color: "#2D1B2E",
+        }}
+      >
+        <Heart size={40} color="#FFD0CE" style={{ marginBottom: 12 }} />
+        <h2 style={{ fontFamily: "'Fredoka', sans-serif", fontSize: 20, margin: "0 0 6px" }}>
+          No matches yet
+        </h2>
+        <p style={{ fontSize: 14, color: "#6b5a6c", margin: 0 }}>
+          Keep swiping on the Discover tab to find some.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "16px 20px", overflowY: "auto", height: "100%" }}>
+      <h1
+        style={{
+          fontFamily: "'Fredoka', sans-serif",
+          fontSize: 24,
+          color: "#2D1B2E",
+          margin: "4px 0 16px",
+        }}
+      >
+        Your matches
+      </h1>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+          gap: 14,
+        }}
+      >
+        {matches.map((m) => (
+          <button
+            key={m.id}
+            onClick={() => onOpenChat(m)}
+            style={{
+              border: "none",
+              background: "#fff",
+              borderRadius: 18,
+              padding: 0,
+              overflow: "hidden",
+              cursor: "pointer",
+              boxShadow: "0 2px 10px rgba(45,27,46,0.1)",
+              textAlign: "left",
+            }}
+          >
+            <div
+              style={{
+                height: 110,
+                background: `linear-gradient(160deg, ${m.photoColor}dd, ${m.photoColor}88)`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 32,
+                fontWeight: 700,
+                color: "#fff",
+                fontFamily: "'Fredoka', sans-serif",
+              }}
+            >
+              {initials(m.name)}
+            </div>
+            <div style={{ padding: "10px 12px" }}>
+              <div style={{ fontWeight: 600, fontSize: 14, color: "#2D1B2E" }}>
+                {m.name}, {m.age}
+              </div>
+              <div style={{ fontSize: 12, color: "#8a7a8c", marginTop: 2 }}>
+                Say hi!
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Chat Screen ----------
+
+const CANNED_REPLIES = [
+  "Haha, fair point!",
+  "Wait, tell me more about that.",
+  "I was just thinking about that too, weird timing.",
+  "What are you up to this weekend?",
+  "That's actually one of my favorite things too.",
+  "Okay you've officially earned bonus points.",
+];
+
+function ChatScreen({ profile, messages, onSend, onBack }) {
+  const [text, setText] = useState("");
+  const scrollRef = useRef(null);
+
+  React.useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleSend = () => {
+    if (!text.trim()) return;
+    onSend(profile.id, text.trim());
+    setText("");
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "14px 16px",
+          borderBottom: "1px solid #f0e6e8",
+          background: "#fff",
+        }}
+      >
+        <button
+          onClick={onBack}
+          aria-label="Back to matches"
+          style={{
+            border: "none",
+            background: "transparent",
+            cursor: "pointer",
+            display: "flex",
+            padding: 4,
+          }}
+        >
+          <ArrowLeft size={22} color="#2D1B2E" />
+        </button>
+        <div
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: "50%",
+            background: profile.photoColor,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#fff",
+            fontWeight: 700,
+            fontFamily: "'Fredoka', sans-serif",
+            fontSize: 16,
+          }}
+        >
+          {initials(profile.name)}
+        </div>
+        <div style={{ fontWeight: 600, fontSize: 15, color: "#2D1B2E" }}>
+          {profile.name}
+        </div>
+      </div>
+
+      <div
+        ref={scrollRef}
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "16px 16px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          background: "#FFF8F3",
+        }}
+      >
+        {messages.length === 0 && (
+          <div
+            style={{
+              textAlign: "center",
+              color: "#a3939a",
+              fontSize: 13,
+              marginTop: 24,
+            }}
+          >
+            You matched with {profile.name}. Break the ice!
+          </div>
+        )}
+        {messages.map((m, i) => (
+          <div
+            key={i}
+            style={{
+              alignSelf: m.from === "me" ? "flex-end" : "flex-start",
+              maxWidth: "75%",
+              padding: "10px 14px",
+              borderRadius: 18,
+              fontSize: 14,
+              lineHeight: 1.4,
+              background: m.from === "me" ? "#FF6B6B" : "#fff",
+              color: m.from === "me" ? "#fff" : "#2D1B2E",
+              boxShadow: m.from === "me" ? "none" : "0 1px 4px rgba(45,27,46,0.08)",
+            }}
+          >
+            {m.text}
+          </div>
+        ))}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          padding: "12px 16px",
+          borderTop: "1px solid #f0e6e8",
+          background: "#fff",
+        }}
+      >
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleSend()}
+          placeholder={`Message ${profile.name}...`}
+          style={{
+            flex: 1,
+            border: "1px solid #ecdfe1",
+            borderRadius: 22,
+            padding: "10px 16px",
+            fontSize: 14,
+            outline: "none",
+          }}
+        />
+        <button
+          onClick={handleSend}
+          aria-label="Send"
+          style={{
+            width: 42,
+            height: 42,
+            borderRadius: "50%",
+            border: "none",
+            background: "#FF6B6B",
+            color: "#fff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            flexShrink: 0,
+          }}
+        >
+          <Send size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Bottom Nav ----------
+
+function BottomNav({ active, onChange, matchCount }) {
+  const items = [
+    { key: "discover", label: "Discover", icon: Sparkles },
+    { key: "matches", label: "Matches", icon: Heart },
+    { key: "chats", label: "Chats", icon: MessageCircle },
+  ];
+  return (
+    <div
+      style={{
+        display: "flex",
+        borderTop: "1px solid #f0e6e8",
+        background: "#fff",
+      }}
+    >
+      {items.map((item) => {
+        const Icon = item.icon;
+        const isActive = active === item.key;
+        return (
+          <button
+            key={item.key}
+            onClick={() => onChange(item.key)}
+            style={{
+              flex: 1,
+              border: "none",
+              background: "transparent",
+              padding: "10px 0 12px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 4,
+              cursor: "pointer",
+              position: "relative",
+            }}
+          >
+            <Icon
+              size={22}
+              color={isActive ? "#FF6B6B" : "#b8a8ac"}
+              fill={isActive && item.key === "matches" ? "#FF6B6B" : "none"}
+              strokeWidth={2}
+            />
+            {item.key === "matches" && matchCount > 0 && (
+              <span
+                style={{
+                  position: "absolute",
+                  top: 4,
+                  right: "calc(50% - 4px)",
+                  width: 16,
+                  height: 16,
+                  borderRadius: "50%",
+                  background: "#FFD93D",
+                  color: "#4A1B0C",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {matchCount}
+              </span>
+            )}
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: isActive ? "#FF6B6B" : "#b8a8ac",
+                fontFamily: "'Fredoka', sans-serif",
+              }}
+            >
+              {item.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------- Chats list (within Chats tab) ----------
+
+function ChatsListScreen({ matches, messagesByMatch, onOpenChat }) {
+  if (matches.length === 0) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100%",
+          textAlign: "center",
+          padding: 32,
+          color: "#2D1B2E",
+        }}
+      >
+        <MessageCircle size={40} color="#FFD0CE" style={{ marginBottom: 12 }} />
+        <h2 style={{ fontFamily: "'Fredoka', sans-serif", fontSize: 20, margin: "0 0 6px" }}>
+          No conversations yet
+        </h2>
+        <p style={{ fontSize: 14, color: "#6b5a6c", margin: 0 }}>
+          Match with someone to start chatting.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "16px 12px", overflowY: "auto", height: "100%" }}>
+      <h1
+        style={{
+          fontFamily: "'Fredoka', sans-serif",
+          fontSize: 24,
+          color: "#2D1B2E",
+          margin: "4px 8px 12px",
+        }}
+      >
+        Chats
+      </h1>
+      {matches.map((m) => {
+        const msgs = messagesByMatch[m.id] || [];
+        const last = msgs[msgs.length - 1];
+        return (
+          <button
+            key={m.id}
+            onClick={() => onOpenChat(m)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              width: "100%",
+              border: "none",
+              background: "transparent",
+              padding: "10px 8px",
+              cursor: "pointer",
+              textAlign: "left",
+              borderRadius: 14,
+            }}
+          >
+            <div
+              style={{
+                width: 50,
+                height: 50,
+                borderRadius: "50%",
+                background: m.photoColor,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#fff",
+                fontWeight: 700,
+                fontFamily: "'Fredoka', sans-serif",
+                fontSize: 18,
+                flexShrink: 0,
+              }}
+            >
+              {initials(m.name)}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 15, color: "#2D1B2E" }}>
+                {m.name}
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  color: "#8a7a8c",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {last ? last.text : "Say hi!"}
+              </div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------- App Root ----------
+
+export default function DatingApp() {
+  const [tab, setTab] = useState("discover");
+  const [matches, setMatches] = useState([]);
+  const [messagesByMatch, setMessagesByMatch] = useState({});
+  const [activeChat, setActiveChat] = useState(null);
+
+  const handleMatch = (profile) => {
+    setMatches((prev) => {
+      if (prev.find((p) => p.id === profile.id)) return prev;
+      return [profile, ...prev];
+    });
+    setMessagesByMatch((prev) => ({ ...prev, [profile.id]: prev[profile.id] || [] }));
+  };
+
+  const handleSendMessage = (matchId, text) => {
+    setMessagesByMatch((prev) => {
+      const existing = prev[matchId] || [];
+      const updated = [...existing, { from: "me", text }];
+      return { ...prev, [matchId]: updated };
+    });
+
+    // Simulate a reply for demo purposes
+    setTimeout(() => {
+      const reply = CANNED_REPLIES[Math.floor(Math.random() * CANNED_REPLIES.length)];
+      setMessagesByMatch((prev) => {
+        const existing = prev[matchId] || [];
+        return { ...prev, [matchId]: [...existing, { from: "them", text: reply }] };
+      });
+    }, 900 + Math.random() * 900);
+  };
+
+  const openChat = (profile) => setActiveChat(profile);
+  const closeChat = () => setActiveChat(null);
+
+  return (
+    <div
+      style={{
+        maxWidth: 420,
+        margin: "0 auto",
+        height: "100vh",
+        maxHeight: 800,
+        background: "#FFF8F3",
+        display: "flex",
+        flexDirection: "column",
+        fontFamily: "'Inter', sans-serif",
+        borderRadius: 28,
+        overflow: "hidden",
+        boxShadow: "0 0 0 1px rgba(45,27,46,0.06)",
+        position: "relative",
+      }}
+    >
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600&display=swap"
+      />
+
+      {activeChat ? (
+        <ChatScreen
+          profile={activeChat}
+          messages={messagesByMatch[activeChat.id] || []}
+          onSend={handleSendMessage}
+          onBack={closeChat}
+        />
+      ) : (
+        <>
+          <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+            {tab === "discover" && <DiscoverScreen onMatch={handleMatch} />}
+            {tab === "matches" && (
+              <MatchesScreen matches={matches} onOpenChat={openChat} />
+            )}
+            {tab === "chats" && (
+              <ChatsListScreen
+                matches={matches}
+                messagesByMatch={messagesByMatch}
+                onOpenChat={openChat}
+              />
+            )}
+          </div>
+          <BottomNav active={tab} onChange={setTab} matchCount={matches.length} />
+        </>
+      )}
+    </div>
+  );
+}
